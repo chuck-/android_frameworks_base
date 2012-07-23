@@ -248,6 +248,8 @@ public class AudioManager {
     public static final int STREAM_TTS = AudioSystem.STREAM_TTS;
     /** @hide The audio stream for incall music delivery */
     public static final int STREAM_INCALL_MUSIC = AudioSystem.STREAM_INCALL_MUSIC;
+    /** @hide The audio stream for FM Radio */
+    public static final int STREAM_FM = AudioSystem.STREAM_FM;
     /** Number of audio streams */
     /**
      * @deprecated Use AudioSystem.getNumStreamTypes() instead
@@ -258,16 +260,17 @@ public class AudioManager {
     /**  @hide Default volume index values for audio streams */
     public static final int[] DEFAULT_STREAM_VOLUME = new int[] {
         4,  // STREAM_VOICE_CALL
-        7,  // STREAM_SYSTEM
+        10,  // STREAM_SYSTEM
         5,  // STREAM_RING
-        11, // STREAM_MUSIC
-        6,  // STREAM_ALARM
+        30, // STREAM_MUSIC
+        15,  // STREAM_ALARM
         5,  // STREAM_NOTIFICATION
         7,  // STREAM_BLUETOOTH_SCO
         7,  // STREAM_SYSTEM_ENFORCED
         11, // STREAM_DTMF
         11, // STREAM_TTS
-        4   // STREAM_INCALL_MUSIC
+        4,  // STREAM_INCALL_MUSIC
+        30  // STREAM_FM
     };
 
     /**
