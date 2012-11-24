@@ -23,6 +23,8 @@ import android.app.ActivityManagerNative;
 import android.bluetooth.BluetoothAdapter;
 import android.content.ComponentName;
 import android.content.ContentResolver;
+import android.content.ContentService;
+import android.content.ContextWrapper;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.IPackageManager;
@@ -37,6 +39,7 @@ import android.net.INetworkStatsService;
 import android.os.IBinder;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.INetworkManagementService;
 import android.os.RemoteException;
@@ -81,12 +84,14 @@ import com.android.server.usb.UsbService;
 import com.android.server.wifi.WifiService;
 import com.android.server.wm.WindowManagerService;
 
+import dalvik.system.DexClassLoader;
 import dalvik.system.VMRuntime;
 import dalvik.system.Zygote;
 
 import java.io.File;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.lang.reflect.Constructor;
 
 import dalvik.system.PathClassLoader;
 import java.lang.reflect.Constructor;
@@ -834,6 +839,42 @@ class ServerThread {
                     CertBlacklister blacklister = new CertBlacklister(context);
                 } catch (Throwable e) {
                     reportWtf("starting CertBlacklister", e);
+                }
+            }
+
+            String[] vendorServices = context.getResources().getStringArray(
+                    com.android.internal.R.array.config_vendorServices);
+
+            if (vendorServices != null && vendorServices.length > 0) {
+
+                String cachePath = new ContextWrapper(context).getCacheDir().getAbsolutePath();
+                ClassLoader parentLoader = ClassLoader.getSystemClassLoader();
+
+                for (String service : vendorServices) {
+                    String[] parts = service.split(":");
+                    if (parts.length != 2) {
+                        Slog.e(TAG, "Found invalid vendor service " + service);
+                        continue;
+                    }
+
+                    String jarPath = parts[0];
+                    String className = parts[1];
+
+                    try {
+                        /* Intentionally skipping all null checks in this block, as we also want an
+                           error message if class loading or ctor resolution failed. The catch block
+                           conveniently provides that for us also for NullPointerException */
+
+                        DexClassLoader loader = new DexClassLoader(jarPath, cachePath, null, parentLoader);
+                        Class<?> klass = loader.loadClass(className);
+                        Constructor<?> ctor = klass.getDeclaredConstructors()[0];
+                        Object instance = ctor.newInstance(context);
+
+                        ServiceManager.addService(klass.getSimpleName(), (IBinder) instance);
+                        Slog.i(TAG, "Vendor service " + className + " started.");
+                    } catch (Exception e) {
+                        Slog.e(TAG, "Starting vendor service " + className + " failed.", e);
+                    }
                 }
             }
 
