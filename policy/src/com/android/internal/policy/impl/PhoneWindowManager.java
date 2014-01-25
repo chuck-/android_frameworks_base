@@ -4366,6 +4366,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return am.isLocalOrRemoteMusicActive();
     }
 
+    boolean isFmActive() {
+        final AudioManager am = (AudioManager)mContext.getSystemService(Context.AUDIO_SERVICE);
+        if (am == null) {
+            Log.w(TAG, "isMusicActive: couldn't get AudioManager reference");
+            return false;
+        }
+        return am.isFmActive();
+    }
+
+
     /**
      * Tell the audio service to adjust the volume appropriate to the event.
      * @param keycode
@@ -4802,8 +4812,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         }
                     }
                 }
-                if (isMusicActive() && (result & ACTION_PASS_TO_USER) == 0) {
-                    if (down && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
+
+                if ((result & ACTION_PASS_TO_USER) == 0)
+					if (down && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
+                    if (isFmActive()) {
+                        handleVolumeKey(AudioManager.STREAM_FM, keyCode);
+                    } else if (isMusicActive()) {
+                    if (mVolBtnMusicControls && down && (keyCode != KeyEvent.KEYCODE_VOLUME_MUTE)) {
                         mIsLongPress = false;
                         int newKeyCode = event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP ?
                                 KeyEvent.KEYCODE_MEDIA_NEXT : KeyEvent.KEYCODE_MEDIA_PREVIOUS;
