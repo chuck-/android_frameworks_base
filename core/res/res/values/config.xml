@@ -1480,5 +1480,5 @@
     <string-array name="config_disabledComponents" translatable="false">
     </string-array>
 
-    <bool name="config_fmSeparateVolumeControl">true</bool>
+    <bool name="config_fmSeparateVolumeControl">false</bool>
 </resources>
