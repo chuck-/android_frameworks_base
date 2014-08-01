@@ -51,6 +51,8 @@ import com.android.internal.statusbar.IStatusBarService;
  * Pie control panel
  * Handles displaying pie and handling key codes
  * Must be initilized
+ * On phones: Stores absolute gravity of Pie. All query methods return only
+ *            relative gravity (depending on screen rotation).
  */
 public class PieControlPanel extends FrameLayout implements OnNavButtonPressedListener {
 
@@ -70,7 +72,10 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     private KeyguardManager mKeyguardManger;
     private ViewGroup mPieContentFrame;
     private PieController mPieController;
+    private boolean mRelocatePieOnRotation;
 
+    /* Analogous to NAVBAR_ALWAYS_AT_RIGHT */
+    final static boolean PIE_ALWAYS_AT_RIGHT = true;
 
     public PieControlPanel(Context context) {
         this(context, null);
@@ -84,6 +89,8 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         mContentArea = new Rect();
         mOrientation = Gravity.BOTTOM;
         mMenuButton = false;
+        mRelocatePieOnRotation = mContext.getResources().getBoolean(
+                R.bool.config_relocatePieOnRotation);
     }
 
     public boolean currentAppUsesMenu() {
@@ -94,12 +101,65 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         mMenuButton = state;
     }
 
+    private int convertAbsoluteToRelativeGravity(int gravity) {
+        if (mRelocatePieOnRotation) {
+            int rot = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE))
+                    .getDefaultDisplay().getRotation();
+
+            if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
+                // only mess around with Pie in landscape
+                if (PIE_ALWAYS_AT_RIGHT) {
+                    // no questions asked if right is preferred
+                    gravity = Gravity.RIGHT;
+                } else if (gravity == Gravity.BOTTOM) {
+                    // bottom is now right/left (depends on the direction of rotation)
+                    gravity = rot == Surface.ROTATION_90 ? Gravity.RIGHT : Gravity.LEFT;
+                } else {
+                    // top can't be used so default to bottom
+                    gravity = Gravity.BOTTOM;
+                }
+            }
+        }
+
+        return gravity;
+    }
+
+    private int convertRelativeToAbsoluteGravity(int gravity) {
+        if (mRelocatePieOnRotation) {
+            int rot = ((WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE))
+                    .getDefaultDisplay().getRotation();
+
+            if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
+                // only mess around with Pie in landscape
+                if (PIE_ALWAYS_AT_RIGHT) {
+                    // no questions asked if right is preferred
+                    gravity = Gravity.RIGHT;
+                } else {
+                    // just stick to the edge when possible
+                    switch (gravity) {
+                    case Gravity.LEFT:
+                        gravity = rot == Surface.ROTATION_90 ? Gravity.NO_GRAVITY : Gravity.BOTTOM;
+                        break;
+                    case Gravity.RIGHT:
+                        gravity = rot == Surface.ROTATION_90 ? Gravity.BOTTOM : Gravity.NO_GRAVITY;
+                        break;
+                    case Gravity.BOTTOM:
+                        gravity = rot == Surface.ROTATION_90 ? Gravity.LEFT : Gravity.RIGHT;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return gravity;
+    }
+
     public int getOrientation() {
-        return mOrientation;
+        return convertAbsoluteToRelativeGravity(mOrientation);
     }
 
     public int getDegree() {
-        switch(mOrientation) {
+        switch(convertAbsoluteToRelativeGravity(mOrientation)) {
             case Gravity.RIGHT:
                 return 0;
             case Gravity.BOTTOM:
@@ -108,6 +168,46 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
                 return 180;
         }
         return 0;
+    }
+
+    /**
+     * Check whether the requested relative gravity is possible. Portrait orientation is assumed to
+     * return true for all gravities that might ever be possible on the device even if they are
+     * unavailable at the exact moment due to the device being in landscape.
+     *
+     * @param gravity
+     *            the Gravity value to check
+     * @return whether the requested relative Gravity is possible
+     * @see #isGravityPossible(int, boolean)
+     */
+    public boolean isGravityPossible(int gravity) {
+        return isGravityPossible(gravity, true);
+    }
+
+    /**
+     * Check whether the requested relative gravity is possible. If the task is to check whether a
+     * gravity would ever be available, portrait orientation should be used for the checking instead
+     * as some values might not be available on phones in landscape.
+     *
+     * @param gravity
+     *            the Gravity value to check
+     * @param forceAssumePortrait
+     *            whether the natural orientation should be preferred instead of the actual
+     *            orientation
+     * @return whether the requested relative Gravity is possible
+     * @see #isGravityPossible(int)
+     */
+    public boolean isGravityPossible(int gravity, boolean forceAssumePortrait) {
+        if (mRelocatePieOnRotation) {
+            int rot = forceAssumePortrait ? Surface.ROTATION_0 : ((WindowManager) mContext
+                    .getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
+
+            if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
+                if (PIE_ALWAYS_AT_RIGHT) return gravity == Gravity.RIGHT;
+            }
+        }
+
+        return convertRelativeToAbsoluteGravity(gravity) != Gravity.NO_GRAVITY;
     }
 
     public BaseStatusBar getBar() {
@@ -143,7 +243,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
     }
 
     public void reorient(int orientation) {
-        mOrientation = orientation;
+        mOrientation = convertRelativeToAbsoluteGravity(orientation);
         show(mShowing);
         Settings.System.putInt(mContext.getContentResolver(),
                     Settings.System.PIE_GRAVITY,
@@ -184,7 +284,7 @@ public class PieControlPanel extends FrameLayout implements OnNavButtonPressedLi
         windowManager.getDefaultDisplay().getRealSize(outSize);
         mWidth = outSize.x;
         mHeight = outSize.y;
-        switch(mOrientation) {
+        switch(getOrientation()) {
             case Gravity.LEFT:
                 mPieController.setCenter(0, mHeight / 2);
                 break;

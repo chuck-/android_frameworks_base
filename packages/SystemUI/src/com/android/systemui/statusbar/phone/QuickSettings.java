@@ -198,6 +198,13 @@ class QuickSettings {
     void setup(NetworkController networkController, BluetoothController bluetoothController,
             BatteryController batteryController, LocationController locationController,
             RotationLockController rotationLockController) {
+
+        // shutdown controllers
+        shutdown(networkController, bluetoothController,
+                 batteryController,locationController,
+                 rotationLockController);
+
+        // setup controllers
         mBluetoothController = bluetoothController;
         mRotationLockController = rotationLockController;
         mLocationController = locationController;
@@ -295,6 +302,18 @@ class QuickSettings {
             }
         };
         mUserInfoTask.execute();
+    }
+
+    public void shutdown(NetworkController networkController, BluetoothController bluetoothController,
+                         BatteryController batteryController, LocationController locationController,
+                         RotationLockController rotationLockController) {
+        networkController.removeNetworkSignalChangedCallback(mModel);
+        bluetoothController.removeStateChangedCallback(mModel);
+        batteryController.removeStateChangedCallback(mModel);
+        locationController.removeSettingsChangedCallback(mModel);
+        rotationLockController.removeRotationLockControllerCallback(mModel);
+
+        mContainerView.removeAllViews();
     }
 
     private void setupQuickSettings() {
@@ -552,6 +571,7 @@ class QuickSettings {
                             public void onClick(View v) {
                                 boolean currentState = mConnectivityManager.getMobileDataEnabled();
                                 mConnectivityManager.setMobileDataEnabled(!currentState);
+                                mModel.refreshRssiTile();
                             }
                         });
                         rssiTile.setFrontOnLongClickListener(new View.OnLongClickListener() {
@@ -910,6 +930,12 @@ class QuickSettings {
                         @Override
                         public void onClick(View v) {
                             if (!immsersiveStyleSelected() && mModel.getImmersiveMode() == 0) {
+                                // reset on the spot value to 0 if is set to ASK_LATER
+                                // so pie observer detects the change and switches to immersive even on more
+                                // ask later choices
+                                Settings.System.putInt(mContext.getContentResolver(),
+                                        Settings.System.PIE_STATE, 0);
+                                // launch on the spot dialog
                                 selectImmersiveStyle();
                             } else {
                                 mModel.switchImmersiveGlobal();
@@ -931,8 +957,8 @@ class QuickSettings {
                     immersiveTile.setBackOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            // instead of just returning, assume user wants to turn on immersive
-                            if(mModel.getImmersiveMode() == 0) {
+                            // instead of just returning, assume user wants to turn on/off immersive
+                            if(mModel.getImmersiveMode() == 0 || mModel.getImmersiveMode() == 4) {
                                 immersiveTile.swapTiles(true);
                                 return;
                             }
@@ -1014,6 +1040,14 @@ class QuickSettings {
                         public void refreshView(QuickSettingsTileView view, State state) {
                             sleepTile.setBackImageResource(state.iconId);
                             sleepTile.setBackText(state.label);
+                        }
+                    });
+                    sleepTile.setBackOnLongClickListener(new View.OnLongClickListener() {
+                        @Override
+                        public boolean onLongClick(View v) {
+                            collapsePanels();
+                            startSettingsActivity(android.provider.Settings.ACTION_DISPLAY_SETTINGS);
+                            return true;
                         }
                     });
                     parent.addView(sleepTile);
@@ -1250,8 +1284,8 @@ class QuickSettings {
     void updateResources() {
         Resources r = mContext.getResources();
 
-        // Update the model
-        mModel.refreshBatteryTile();
+        // Update the battery tile
+        updateBattery();
 
         QuickSettingsContainerView container = ((QuickSettingsContainerView)mContainerView);
 
@@ -1263,12 +1297,13 @@ class QuickSettings {
     private void selectImmersiveStyle() {
         Resources r = mContext.getResources();
 
-        SettingConfirmationHelper helper = new SettingConfirmationHelper(mContext);
-        helper.showConfirmationDialogForSetting(
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+                mContext,
                 r.getString(R.string.enable_pie_control_title),
                 r.getString(R.string.enable_pie_control_message),
                 r.getDrawable(R.drawable.want_some_slice),
-                Settings.System.PIE_STATE);
+                Settings.System.PIE_STATE,
+                null);
     }
 
     private void showBrightnessDialog() {

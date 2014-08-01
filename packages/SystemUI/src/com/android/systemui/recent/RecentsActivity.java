@@ -27,6 +27,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.UserHandle;
+import android.provider.Settings;
+import android.util.SettingConfirmationHelper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -54,6 +56,7 @@ public class RecentsActivity extends Activity {
     private static boolean mShowing;
     private IntentFilter mIntentFilter;
     private boolean mForeground;
+    protected boolean mBackPressed;
 
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
@@ -99,6 +102,9 @@ public class RecentsActivity extends Activity {
                 R.anim.recents_return_to_launcher_enter,
                 R.anim.recents_return_to_launcher_exit);
         mForeground = false;
+        if (mRecentsPanel != null) {
+            mRecentsPanel.dismissContextMenuIfAny();
+        }
         super.onPause();
     }
 
@@ -145,6 +151,15 @@ public class RecentsActivity extends Activity {
         } else {
             updateWallpaperVisibility(true);
         }
+
+        SettingConfirmationHelper.showConfirmationDialogForSetting(
+            this,
+            this.getString(R.string.navbar_recents_clear_all_title),
+            this.getString(R.string.navbar_recents_clear_all_message),
+            this.getResources().getDrawable(R.drawable.navbar_recents_clear_all),
+            Settings.System.NAVBAR_RECENTS_CLEAR_ALL,
+            null);
+
         mShowing = true;
         if (mRecentsPanel != null) {
             // Call and refresh the recent tasks list in case we didn't preload tasks
@@ -163,7 +178,12 @@ public class RecentsActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        dismissAndGoBack();
+        mBackPressed = true;
+        try {
+            dismissAndGoBack();
+        } finally {
+            mBackPressed = false;
+        }
     }
 
     public void dismissAndGoHome() {
@@ -187,6 +207,7 @@ public class RecentsActivity extends Activity {
                             ActivityManager.RECENT_IGNORE_UNAVAILABLE);
             if (recentTasks.size() > 1 &&
                     mRecentsPanel.simulateClick(recentTasks.get(1).persistentId)) {
+                finish();
                 // recents panel will take care of calling show(false) through simulateClick
                 return;
             }
@@ -197,8 +218,8 @@ public class RecentsActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        getWindow().addPrivateFlags(
-                WindowManager.LayoutParams.PRIVATE_FLAG_INHERIT_TRANSLUCENT_DECOR);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION
+                        | WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         setContentView(R.layout.status_bar_recent_panel);
         mRecentsPanel = (RecentsPanelView) findViewById(R.id.recents_root);
         mRecentsPanel.setOnTouchListener(new TouchOutsideListener(mRecentsPanel));
@@ -258,7 +279,12 @@ public class RecentsActivity extends Activity {
         } else if (CLEAR_RECENTS_INTENT.equals(action)) {
             if (mRecentsPanel != null) {
                 if (mRecentsPanel.isShowing()) {
-                    mRecentsPanel.clearRecentViewList();
+                        if(Settings.System.getInt(this.getContentResolver(),
+                            Settings.System.NAVBAR_RECENTS_CLEAR_ALL, 0) != 2) {
+                                mRecentsPanel.clearRecentViewList();
+                        } else {
+                            dismissAndGoBack();
+                        }
                 }
             }
         }

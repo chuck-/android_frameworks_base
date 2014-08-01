@@ -15,8 +15,6 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <!-- Pie controls dimensions -->
-    <dimen name="pie_trigger_height">10dp</dimen>
-    <dimen name="pie_trigger_width">150dp</dimen>
     <dimen name="pie_radius_start">65dp</dimen>
     <dimen name="pie_radius_increment">80dp</dimen>
     <dimen name="pie_outline">1.5dp</dimen>
@@ -37,4 +35,34 @@
     <dimen name="pie_tab_title_height">24dp</dimen>
     <dimen name="pie_item_size">40dp</dimen>
     <dimen name="pie_panel_padding">20dp</dimen>
+    <!-- Notification peek dimens -->
+    <dimen name="item_padding">5dp</dimen>
+    <dimen name="small_notification_icon_size">30dp</dimen>
+    <dimen name="small_notification_icon_padding">2dp</dimen>
+    <dimen name="notification_icon_size">46dp</dimen>
+    <dimen name="notification_text_width">300dp</dimen>
+    <dimen name="clock_padding">10dp</dimen>
+    <dimen name="clock_size">15dp</dimen>
+    <!-- Hover dimens -->
+    <dimen name="hover_cling_width">-1px</dimen>
+    <dimen name="hover_tablet_width">478dp</dimen>
+    <!-- QuickSettings dimens -->
+    <dimen name="qs_tile_corner_switch_icon_size">32dp</dimen>
+    <!-- Theme Engine overrides to avoid modifications that will affect hover view. -->
+    <dimen name="default_notification_min_height">64dp</dimen>
+    <dimen name="default_notification_max_height">256dp</dimen>
+    <dimen name="default_notification_row_min_height">70dp</dimen>
+    <dimen name="default_notification_row_max_height">260dp</dimen>
+
+    <!-- Circle battery view -->
+    <item name="qs_circle_battery_size_percentage" format="float" type="dimen">1.0</item>
+    <item name="qs_circle_battery_thickness_fg_percentage" format="float" type="dimen">1.0</item>
+    <item name="qs_circle_battery_thickness_bg_percentage" format="float" type="dimen">1.0</item>
+
+    <item name="sb_circle_battery_size_percentage" format="float" type="dimen">1.0</item>
+    <item name="sb_circle_battery_thickness_fg_percentage" format="float" type="dimen">1.0</item>
+    <item name="sb_circle_battery_thickness_bg_percentage" format="float" type="dimen">1.0</item>
+
+    <!-- Wifi mcombo margins (used by Theme Engine) -->
+    <dimen name="wifi_combo_margin_end">-6dp</dimen>
 </resources>

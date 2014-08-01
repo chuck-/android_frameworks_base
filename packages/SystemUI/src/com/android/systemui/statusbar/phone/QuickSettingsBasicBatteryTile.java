@@ -56,9 +56,12 @@ class QuickSettingsBasicBatteryTile extends QuickSettingsTileView {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
         mTextView = (TextView) findViewById(R.id.text);
-        mBattery = (BatteryMeterView) findViewById(R.id.image);
-        mBattery.setVisibility(View.GONE);
+        mBattery = (BatteryMeterView) findViewById(R.id.battery);
+        mBattery.updateSettings(true);
+        mBattery.setColors(true);
         mCircleBattery = (BatteryCircleMeterView) findViewById(R.id.circle_battery);
+        mCircleBattery.updateSettings(true);
+        mCircleBattery.setColors(true);
     }
 
     @Override
@@ -90,7 +93,9 @@ class QuickSettingsBasicBatteryTile extends QuickSettingsTileView {
         if (mBattery == null) {
             return;
         }
-        mCircleBattery.updateSettings();
-        mBattery.updateSettings();
+        mCircleBattery.updateSettings(true);
+        mCircleBattery.setColors(true);
+        mBattery.updateSettings(true);
+        mBattery.setColors(true);
     }
 }

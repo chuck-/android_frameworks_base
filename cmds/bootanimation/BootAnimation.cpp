@@ -53,6 +53,7 @@
 #include "BootAnimation.h"
 
 #define USER_BOOTANIMATION_FILE "/data/local/bootanimation.zip"
+#define THEME_BOOTANIMATION_FILE "/data/system/theme/bootanimation.zip"
 #define SYSTEM_BOOTANIMATION_FILE "/system/media/bootanimation.zip"
 #define SYSTEM_ENCRYPTED_BOOTANIMATION_FILE "/system/media/bootanimation-encrypted.zip"
 #define EXIT_PROP_NAME "service.bootanim.exit"
@@ -227,6 +228,18 @@ status_t BootAnimation::readyToRun() {
     status_t status = SurfaceComposerClient::getDisplayInfo(dtoken, &dinfo);
     if (status)
         return -1;
+    char value[PROPERTY_VALUE_MAX];
+    property_get("persist.panel.orientation", value, "0");
+    int orient = atoi(value) / 90;
+
+    if(orient == eOrientation90 || orient == eOrientation270) {
+        int temp = dinfo.h;
+        dinfo.h = dinfo.w;
+        dinfo.w = temp;
+    }
+
+    Rect destRect(dinfo.w, dinfo.h);
+    mSession->setDisplayProjection(dtoken, orient, destRect, destRect);
 
     // create the native surface
     sp<SurfaceControl> control = session()->createSurface(String8("BootAnimation"),
@@ -288,6 +301,9 @@ status_t BootAnimation::readyToRun() {
             ((access(USER_BOOTANIMATION_FILE, R_OK) == 0) &&
             (mZip.open(USER_BOOTANIMATION_FILE) == NO_ERROR)) ||
 
+            ((access(THEME_BOOTANIMATION_FILE, R_OK) == 0) &&
+            (mZip.open(THEME_BOOTANIMATION_FILE) == NO_ERROR)) ||
+
             ((access(SYSTEM_BOOTANIMATION_FILE, R_OK) == 0) &&
             (mZip.open(SYSTEM_BOOTANIMATION_FILE) == NO_ERROR))) {
         mAndroidAnimation = false;
@@ -302,6 +318,8 @@ status_t BootAnimation::readyToRun() {
         fd = fopen(SYSTEM_ENCRYPTED_BOOTANIMATION_FILE, "r");
     else if (access(USER_BOOTANIMATION_FILE, R_OK) == 0)
         fd = fopen(USER_BOOTANIMATION_FILE, "r");
+    else if (access(THEME_BOOTANIMATION_FILE, R_OK) == 0)
+        fd = fopen(THEME_BOOTANIMATION_FILE, "r");
     else if (access(SYSTEM_BOOTANIMATION_FILE, R_OK) == 0)
         fd = fopen(SYSTEM_BOOTANIMATION_FILE, "r");
     else

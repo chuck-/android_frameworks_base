@@ -23,7 +23,9 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.animation.TimeInterpolator;
+import android.app.ActivityManagerNative;
 import android.database.ContentObserver;
+import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -50,6 +52,7 @@ import android.graphics.RectF;
 import android.graphics.LightingColorFilter;
 import android.graphics.Typeface;
 import android.os.Handler;
+import android.os.RemoteException;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.AttributeSet;
@@ -74,6 +77,9 @@ import com.android.systemui.statusbar.policy.Clock;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.android.systemui.statusbar.pie.PieController.RECENT_BUTTON;
+import static com.android.systemui.statusbar.phone.QuickSettingsModel.IMMERSIVE_MODE_APP;
+
 /**
  * Pie menu
  * Handles creating, drawing, animations and touch eventing for pie.
@@ -83,7 +89,8 @@ public class PieMenu extends FrameLayout {
     private static final String FONT_FAMILY_CONDENSED = "sans-serif-condensed";
     private static final String FONT_FAMILY_LIGHT = "sans-serif-light";
 
-    private static final int PIE_MODE_FULL = 2;
+    private static final int IMMERSIVE_MODE_FULL = 1;
+    private static final int IMMERSIVE_MODE_HIDE_NAVBAR_ONLY = 2;
 
     private static int ANIMATOR_DEC_SPEED15 = 1;
     private static int ANIMATOR_ACC_SPEED15 = 2;
@@ -112,6 +119,19 @@ public class PieMenu extends FrameLayout {
     private static final int ANGLE_BASE = 12;
     private static final float SIZE_BASE = 1.0f;
 
+    // colors
+    private int mBatteryBackgroundColor;
+    private int mBatteryJuiceBackgroundColor;
+    private int mBatteryJuiceCriticalBackgroundColor;
+    private int mBatteryJuiceLowBackgroundColor;
+    private int mChevronBackgroundColor;
+    private int mMenuBackgroundColor;
+    private int mOutlinesBackgroundColor;
+    private int mSnapBackgroundColor;
+    private int mStatusBackgroundColor;
+    private int mSelectBackgroundColor;
+
+    // structure
     private int mPanelDegree;
     private int mPanelOrientation;
     private int mInnerPieRadius;
@@ -138,13 +158,14 @@ public class PieMenu extends FrameLayout {
     private Path mBatteryPathBackground;
     private Path mBatteryPathJuice;
 
-    private Paint mPieBackground = new Paint(COLOR_PIE_BACKGROUND);
-    private Paint mPieSelected = new Paint(COLOR_PIE_SELECT);
-    private Paint mPieOutlines = new Paint(COLOR_PIE_OUTLINES);
-    private Paint mChevronBackground = new Paint(COLOR_CHEVRON);
-    private Paint mBatteryJuice = new Paint(COLOR_BATTERY_JUICE);
-    private Paint mBatteryBackground = new Paint(COLOR_BATTERY_BACKGROUND);
-    private Paint mSnapBackground = new Paint(COLOR_SNAP_BACKGROUND);
+    // paints
+    private Paint mPieBackground;
+    private Paint mPieSelected;
+    private Paint mPieOutlines;
+    private Paint mChevronBackground;
+    private Paint mBatteryJuice;
+    private Paint mBatteryBackground;
+    private Paint mSnapBackground;
 
     private Paint mClockPaint;
     private Paint mAmPmPaint;
@@ -174,6 +195,7 @@ public class PieMenu extends FrameLayout {
     private PieControlPanel mPanel;
 
     private boolean mHasShown;
+    private boolean mHasAssistant = false;
 
     private class SnapPoint {
         public boolean active;
@@ -189,13 +211,19 @@ public class PieMenu extends FrameLayout {
             gravity = snapGravity;
             active = false;
         }
+
+        /** @return whether the gravity of this snap point is usable under the current conditions */
+        public boolean isCurrentlyPossible() {
+            return mPanel.isGravityPossible(gravity, false);
+        }
     }
 
     private SnapPoint[] mSnapPoint = new SnapPoint[3];
     int mSnapRadius;
     int mSnapThickness;
+    int mNumberOfSnapPoints;
 
-    private int mPieMode;
+    private int mImmersiveMode;
     private boolean mOpen;
     private boolean mHapticFeedback;
     private boolean mIsProtected;
@@ -238,15 +266,30 @@ public class PieMenu extends FrameLayout {
     private float mY = 0;
 
     private void getDimensions() {
+        // fetch colors
+        mBatteryBackgroundColor = mResources.getColor(R.color.pie_battery_background);
+        mBatteryJuiceBackgroundColor = mResources.getColor(R.color.pie_battery_juice_background);
+        mBatteryJuiceCriticalBackgroundColor = mResources.getColor(R.color.pie_battery_juice_critical_background);
+        mBatteryJuiceLowBackgroundColor = mResources.getColor(R.color.pie_battery_juice_low_background);
+        mChevronBackgroundColor = mResources.getColor(R.color.pie_chevron_background);
+        mMenuBackgroundColor = mResources.getColor(R.color.pie_menu_background);
+        mOutlinesBackgroundColor = mResources.getColor(R.color.pie_outlines_background);
+        mSnapBackgroundColor = mResources.getColor(R.color.pie_snap_background);
+        mStatusBackgroundColor = mResources.getColor(R.color.pie_status_background);
+        mSelectBackgroundColor = mResources.getColor(R.color.pie_select_background);
+
+        // fetch orientation
         mPanelDegree = mPanel.getDegree();
         mPanelOrientation = mPanel.getOrientation();
 
         // fetch modes
-        mPieMode = Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.PIE_MODE, 0);
+        mImmersiveMode = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.IMMERSIVE_MODE, 0);
         mHapticFeedback = Settings.System.getInt(mContext.getContentResolver(),
                 Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0;
         mIsProtected = mPanel.isKeyguardSecureShowing();
+        mHasAssistant = mPieHelper.isAssistantAvailable();
+        mIsAssistantAvailable = mPieHelper.getAssistIntent() != null;
 
         // hardcode for now
         mPieAngle = ANGLE_BASE;
@@ -266,20 +309,21 @@ public class PieMenu extends FrameLayout {
         int mHeight = outSize.y;
 
         int snapIndex = 0;
-        if (mPanelOrientation != Gravity.LEFT) {
+        if (mPanelOrientation != Gravity.LEFT && mPanel.isGravityPossible(Gravity.LEFT, true)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     0 + mSnapThickness / 2, mHeight / 2, mSnapRadius, Gravity.LEFT);
         }
 
-        if (mPanelOrientation != Gravity.RIGHT) {
+        if (mPanelOrientation != Gravity.RIGHT && mPanel.isGravityPossible(Gravity.RIGHT, true)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     mWidth - mSnapThickness / 2, mHeight / 2, mSnapRadius, Gravity.RIGHT);
         }
 
-        if (mPanelOrientation != Gravity.BOTTOM) {
+        if (mPanelOrientation != Gravity.BOTTOM && mPanel.isGravityPossible(Gravity.BOTTOM, true)) {
             mSnapPoint[snapIndex ++] = new SnapPoint(
                     mWidth / 2, mHeight - mSnapThickness / 2, mSnapRadius, Gravity.BOTTOM);
         }
+        mNumberOfSnapPoints = snapIndex;
 
         // create pie
         mEmptyAngle = (int) (mPieAngle * mPieSize);
@@ -331,15 +375,15 @@ public class PieMenu extends FrameLayout {
         mOuterBatteryRadius = (int) (mInnerBatteryRadius +
                 mResources.getDimensionPixelSize(R.dimen.pie_battery_increment) * mPieSize);
 
-        mBatteryBackground.setColor(COLOR_BATTERY_BACKGROUND);
+        mBatteryBackground.setColor(mBatteryBackgroundColor);
         mBatteryLevel = mPieHelper.getBatteryLevel();
         if(mBatteryLevel <= PieHelper.LOW_BATTERY_LEVEL
                 && mBatteryLevel > PieHelper.CRITICAL_BATTERY_LEVEL) {
-            mBatteryJuice.setColor(COLOR_BATTERY_JUICE_LOW);
+            mBatteryJuice.setColor(mBatteryJuiceLowBackgroundColor);
         } else if(mBatteryLevel <= PieHelper.CRITICAL_BATTERY_LEVEL) {
-            mBatteryJuice.setColor(COLOR_BATTERY_JUICE_CRITICAL);
+            mBatteryJuice.setColor(mBatteryJuiceCriticalBackgroundColor);
         } else {
-            mBatteryJuice.setColor(COLOR_BATTERY_JUICE);
+            mBatteryJuice.setColor(mBatteryJuiceBackgroundColor);
         }
 
         mStartBattery = mPanel.getDegree() + mEmptyAngle + mPieGap;
@@ -349,15 +393,15 @@ public class PieMenu extends FrameLayout {
         mBatteryPathJuice = makeSlice(mStartBattery, mStartBattery,
                 mInnerBatteryRadius, mOuterBatteryRadius, mCenter);
 
-        mSnapBackground.setColor(COLOR_SNAP_BACKGROUND);
-        mStatusPaint.setColor(COLOR_STATUS);
+        mSnapBackground.setColor(mSnapBackgroundColor);
+        mStatusPaint.setColor(mStatusBackgroundColor);
 
-        mPieBackground.setColor(COLOR_PIE_BACKGROUND);
-        mPieSelected.setColor(COLOR_PIE_SELECT);
-        mPieOutlines.setColor(COLOR_PIE_OUTLINES);
-        mClockPaint.setColor(COLOR_STATUS);
-        mAmPmPaint.setColor(COLOR_STATUS);
-        mChevronBackground.setColor(COLOR_CHEVRON);
+        mPieBackground.setColor(mMenuBackgroundColor);
+        mPieSelected.setColor(mSelectBackgroundColor);
+        mPieOutlines.setColor(mOutlinesBackgroundColor);
+        mClockPaint.setColor(mStatusBackgroundColor);
+        mAmPmPaint.setColor(mStatusBackgroundColor);
+        mChevronBackground.setColor(mChevronBackgroundColor);
         mBatteryJuice.setColorFilter(null);
 
         // measure clock
@@ -401,7 +445,7 @@ public class PieMenu extends FrameLayout {
                 if (mAnimators[ANIMATOR_SNAP_GROW].fraction == 1) {
                     for (int i = 0; i < 2; i++) {
                         SnapPoint snap = mSnapPoint[i];
-                        if (snap.active) {
+                        if (snap != null && snap.active && snap.isCurrentlyPossible()) {
                             if(mHapticFeedback) mVibrator.vibrate(2);
                             deselect();
                             animateOut();
@@ -453,7 +497,14 @@ public class PieMenu extends FrameLayout {
         mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
         mPieHelper = PieHelper.getInstance();
 
-        mIsAssistantAvailable = mPieHelper.getAssistIntent() != null;
+        // initialize main paints
+        mPieBackground = new Paint();
+        mPieSelected = new Paint();
+        mPieOutlines = new Paint();
+        mChevronBackground = new Paint();
+        mBatteryJuice = new Paint();
+        mBatteryBackground = new Paint();
+        mSnapBackground = new Paint();
 
         // initialize classes
         mItems = new ArrayList<PieItem>();
@@ -658,12 +709,15 @@ public class PieMenu extends FrameLayout {
             canvas.drawARGB((int)(mAnimators[ANIMATOR_DEC_SPEED15].fraction * 0xcc), 0, 0, 0);
 
             // snap points
-            final int threshold = mPieMode == PIE_MODE_FULL && !mIsProtected ?
+            final int threshold = (mImmersiveMode == IMMERSIVE_MODE_FULL || mImmersiveMode == IMMERSIVE_MODE_APP) && !mIsProtected ?
                     mOuterChevronRadius : mOuterChevronLiteRadius;
 
             if (mCenterDistance > threshold) {
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < mNumberOfSnapPoints; i++) {
                     SnapPoint snap = mSnapPoint[i];
+                    if (!snap.isCurrentlyPossible()) continue;
+
+                    if (snap == null) continue;
 
                     float snapDistanceX = snap.x - mX;
                     float snapDistanceY = snap.y - mY;
@@ -699,9 +753,9 @@ public class PieMenu extends FrameLayout {
 
             state = canvas.save();
             canvas.rotate(90, mCenter.x, mCenter.y);
-            if (mPieMode == PIE_MODE_FULL && !mIsProtected) {
+            if ((mImmersiveMode == IMMERSIVE_MODE_FULL || mImmersiveMode == IMMERSIVE_MODE_APP) && !mIsProtected) {
                 canvas.drawPath(mChevronPath, mChevronBackground);
-            } else {
+            } else if (mImmersiveMode == IMMERSIVE_MODE_HIDE_NAVBAR_ONLY) {
                 for (int i=0; i < CHEVRON_LITE_FRAGMENTS + 2; i++) {
                     canvas.drawPath(mChevronLitePath[i], mChevronBackground);
                 }
@@ -709,7 +763,7 @@ public class PieMenu extends FrameLayout {
             canvas.restoreToCount(state);
 
             // paint status report only if settings allow
-            if (mPieMode == PIE_MODE_FULL && !mIsProtected) {
+            if ((mImmersiveMode == IMMERSIVE_MODE_FULL || mImmersiveMode == IMMERSIVE_MODE_APP) && !mIsProtected) {
                 // draw battery
                 mBatteryBackground.setAlpha((int)
                      (mAnimators[ANIMATOR_DEC_SPEED15].fraction * 0x22));
@@ -823,16 +877,21 @@ public class PieMenu extends FrameLayout {
         float distanceX = mCenter.x - mX;
         float distanceY = mCenter.y - mY;
         mCenterDistance = (float) Math.sqrt(Math.pow(distanceX, 2) + Math.pow(distanceY, 2));
-        float shadeTreshold = mPieMode ==
-                PIE_MODE_FULL ? mOuterChevronRadius : mOuterChevronLiteRadius;
+        float shadeTreshold =
+                mImmersiveMode == IMMERSIVE_MODE_FULL || mImmersiveMode == IMMERSIVE_MODE_APP ?
+                        mOuterChevronRadius : mOuterChevronLiteRadius;
 
         int action = evt.getActionMasked();
         if (MotionEvent.ACTION_DOWN == action) {
             // open panel
             animateIn();
         } else if (MotionEvent.ACTION_MOVE == action) {
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < mNumberOfSnapPoints; i++) {
                 SnapPoint snap = mSnapPoint[i];
+                if (!snap.isCurrentlyPossible()) continue;
+
+                if (snap == null) continue;
+
                 float snapDistanceX = snap.x - mX;
                 float snapDistanceY = snap.y - mY;
                 float snapDistance = (float)
@@ -884,6 +943,15 @@ public class PieMenu extends FrameLayout {
                 if (item != null && item.getView() != null && mCenterDistance < shadeTreshold) {
                     if(mHapticFeedback) mVibrator.vibrate(2);
                     item.getView().performClick();
+                    if (item.getName().equals(RECENT_BUTTON)) {
+                        try {
+                            ActivityManagerNative.getDefault().dismissKeyguardOnNextActivity();
+                        } catch (ActivityNotFoundException e) {
+                            // Something happened
+                        } catch (RemoteException ex) {
+                            // system is dead
+                        }
+                    }
                 }
 
                 // check for google now action
