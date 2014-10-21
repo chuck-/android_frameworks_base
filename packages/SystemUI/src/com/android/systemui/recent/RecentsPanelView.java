@@ -442,8 +442,14 @@ public class RecentsPanelView extends FrameLayout implements OnItemClickListener
     }
 
     public boolean showAlternativeRecentsClearAll() {
-        return Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL, 0, UserHandle.USER_CURRENT) == 1;
+        boolean showAlternate = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.ALTERNATIVE_RECENTS_CLEAR_ALL, 0, UserHandle.USER_CURRENT) == 1;
+        boolean navBarClearAllOn = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.NAVBAR_RECENTS_CLEAR_ALL, 0, UserHandle.USER_CURRENT) != 2;
+        boolean cardStackRecents = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.STATUS_BAR_RECENTS_CARD_STACK, 0, UserHandle.USER_CURRENT) != 2;
+
+        return showAlternate && !navBarClearAllOn && !cardStackRecents;
     }
 
     protected void onAttachedToWindow () {
