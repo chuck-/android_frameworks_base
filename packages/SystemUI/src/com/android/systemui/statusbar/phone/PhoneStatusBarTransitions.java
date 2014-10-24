@@ -240,9 +240,11 @@ public final class PhoneStatusBarTransitions extends BarTransitions {
 
         @Override
         public void onChange(final boolean selfChange) {
-            mDrawable.setOverrideGradientAlpha(Settings.System.getInt(
-                    mDrawable.mContext.getContentResolver(),
-                    Settings.System.DYNAMIC_SYSTEM_BARS_GRADIENT_STATE, 0) == 1 ? 0xff : 0);
+            if (mDrawable != null) {
+                mDrawable.setOverrideGradientAlpha(Settings.System.getInt(
+                        mDrawable.mContext.getContentResolver(),
+                        Settings.System.DYNAMIC_SYSTEM_BARS_GRADIENT_STATE, 0) == 1 ? 0xff : 0);
+            }
         }
     }
 }
