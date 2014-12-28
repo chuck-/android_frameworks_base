@@ -51,6 +51,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.Build.VERSION_CODES;
 import android.speech.tts.TextToSpeech;
+import android.telephony.MSimTelephonyManager;
 import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.Log;
@@ -2398,6 +2399,15 @@ public final class Settings {
                 "hide_rotation_lock_toggle_for_accessibility";
 
         /**
+         * Call recording format value
+         * 0: AMR_WB
+         * 1: MPEG_4
+         * Default: 0
+         * @hide
+         */
+        public static final String CALL_RECORDING_FORMAT = "call_recording_format";
+
+        /**
          * Whether the phone vibrates when it is ringing due to an incoming call. This will
          * be used by Phone and Setting apps; it shouldn't affect other apps.
          * The value is boolean (1 or 0).
@@ -3001,6 +3011,12 @@ public final class Settings {
         public static final String SWAP_VOLUME_KEYS_ON_ROTATION = "swap_volume_keys_on_rotation";
 
         /**
+         * Quick Settings tiles that should be hidden automatically.
+         * @hide
+         */
+        public static final String QUICK_SETTINGS_HIDE_TILES = "quick_settings_hide_tiles";
+
+        /**
          * Setting to show the battery percentage text
          * @hide
          */
@@ -3155,6 +3171,25 @@ public final class Settings {
         public static final int INCOMING_CALL_STYLE_FULLSCREEN_PHOTO = 1;
 
         /**
+         * Whether wifi settings will connect to access point automatically
+         * 0 = automatically
+         * 1 = manually
+         * @hide
+         */
+        public static final String WIFI_AUTO_CONNECT_TYPE = "wifi_auto_connect_type";
+
+        /**
+         * Whether wifi settings will connect to access point automatically when
+         * network from mobile network transform to Wifi network
+         * 0 = automatically
+         * 1 = manually
+         * 2 = always ask
+         *
+         * @hide
+         */
+        public static final String DATA_TO_WIFI_CONNECT_TYPE = "data_to_wifi_connect_type";
+
+         /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -3573,6 +3608,7 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_P2P_DEVICE_NAME);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SAVED_STATE);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SUPPLICANT_SCAN_INTERVAL_MS);
+            MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SUPPLICANT_SCAN_INTERVAL_WFD_CONNECTED_MS);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SUSPEND_OPTIMIZATIONS_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_WATCHDOG_ON);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED);
@@ -6131,6 +6167,13 @@ public final class Settings {
                "wifi_scan_interval_p2p_connected_ms";
 
        /**
+        * The intervel in milliseconds to scan at supplicant when wfd session
+        * @hide
+        */
+       public static final String WIFI_SUPPLICANT_SCAN_INTERVAL_WFD_CONNECTED_MS =
+                 "wifi_scan_intervel_wfd_connected_ms";
+
+       /**
         * Whether the Wi-Fi watchdog is enabled.
         */
        public static final String WIFI_WATCHDOG_ON = "wifi_watchdog_on";
@@ -7155,6 +7198,36 @@ public final class Settings {
           * @hide
           */
         public static final String TUNE_AWAY_STATUS = "tune_away";
+
+        /**
+         * @hide
+         */
+        public static final String MULTI_SIM_SUB_NAME = "multi_sim_sub_name";
+
+        /**
+         * @hide
+         */
+        public static String getSimNameForSubscription(Context context, int subscription,
+                String defaultValue) {
+            String imsi = MSimTelephonyManager.from(context).getSubscriberId(subscription);
+            if (imsi == null) {
+                return defaultValue;
+            }
+            String name = Settings.Global.getString(context.getContentResolver(),
+                    MULTI_SIM_SUB_NAME + "_" + imsi);
+            return TextUtils.isEmpty(name) ? defaultValue : name;
+        }
+
+        /**
+         * @hide
+         */
+        public static void setSimNameForSubscription(Context context, int subscription,
+                String name) {
+            String imsi = MSimTelephonyManager.from(context).getSubscriberId(subscription);
+            if (imsi == null) return;
+            String prefKey = MULTI_SIM_SUB_NAME + "_" + imsi;
+            Settings.Global.putString(context.getContentResolver(), prefKey, name);
+        }
     }
 
     /**
