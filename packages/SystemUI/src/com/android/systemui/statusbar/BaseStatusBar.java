@@ -789,6 +789,7 @@ public abstract class BaseStatusBar extends SystemUI implements
 
     @Override
     public void toggleRecentApps() {
+        updateClearAllRecents(); // reload right visibility
         int msg = MSG_TOGGLE_RECENTS_PANEL;
         mHandler.removeMessages(msg);
         mHandler.sendEmptyMessage(msg);
